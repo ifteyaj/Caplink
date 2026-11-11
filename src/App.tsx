@@ -6,75 +6,6 @@ import { Listing, MAJORS, SKILLS, cn } from './types';
 
 // --- Components ---
 
-const GeminiEffect = () => {
-  return (
-    <div className="absolute inset-0 -z-10 overflow-hidden pointer-events-none">
-      <svg className="w-full h-full opacity-70" viewBox="0 0 1000 1000" preserveAspectRatio="none">
-        <defs>
-          <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-            <feGaussianBlur stdDeviation="25" result="blur" />
-            <feComposite in="SourceGraphic" in2="blur" operator="over" />
-          </filter>
-          <linearGradient id="gemini-grad-1" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#6366f1" stopOpacity="0" />
-            <stop offset="50%" stopColor="#8b5cf6" stopOpacity="1" />
-            <stop offset="100%" stopColor="#6366f1" stopOpacity="0" />
-          </linearGradient>
-          <linearGradient id="gemini-grad-2" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#34d399" stopOpacity="0" />
-            <stop offset="50%" stopColor="#6366f1" stopOpacity="1" />
-            <stop offset="100%" stopColor="#34d399" stopOpacity="0" />
-          </linearGradient>
-        </defs>
-        
-        {/* Animated Paths */}
-        {[...Array(4)].map((_, i) => (
-          <motion.path
-            key={`path-1-${i}`}
-            d={`M -200 ${200 + i * 150} Q 250 ${50 + i * 70} 500 ${500} T 1200 ${800 - i * 70}`}
-            fill="none"
-            stroke="url(#gemini-grad-1)"
-            strokeWidth="4"
-            filter="url(#glow)"
-            initial={{ pathLength: 0, pathOffset: 1 }}
-            animate={{ 
-              pathLength: [0.3, 0.6, 0.3],
-              pathOffset: [1, -1]
-            }}
-            transition={{
-              duration: 8 + i * 2,
-              repeat: Infinity,
-              ease: "linear"
-            }}
-          />
-        ))}
-        
-        {[...Array(4)].map((_, i) => (
-          <motion.path
-            key={`path-2-${i}`}
-            d={`M -200 ${800 - i * 150} Q 250 ${950 - i * 70} 500 ${500} T 1200 ${200 + i * 70}`}
-            fill="none"
-            stroke="url(#gemini-grad-2)"
-            strokeWidth="4"
-            filter="url(#glow)"
-            initial={{ pathLength: 0, pathOffset: 1 }}
-            animate={{ 
-              pathLength: [0.3, 0.6, 0.3],
-              pathOffset: [1, -1]
-            }}
-            transition={{
-              duration: 10 + i * 2,
-              repeat: Infinity,
-              ease: "linear"
-            }}
-          />
-        ))}
-      </svg>
-      <div className="absolute inset-0 bg-gradient-to-b from-background/0 via-background/20 to-background" />
-    </div>
-  );
-};
-
 const LoginModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) => {
   const { login } = useAuth();
   const [email, setEmail] = useState('');
@@ -565,7 +496,6 @@ export default function App() {
         {view === 'browse' && (
           <>
             <div className="relative text-center mb-16 pt-12 pb-20 overflow-hidden rounded-[3rem]">
-              <GeminiEffect />
               <motion.h1 
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}

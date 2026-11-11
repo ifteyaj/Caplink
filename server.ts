@@ -86,8 +86,8 @@ app.post("/api/auth/login", (req, res) => {
   // Set Session Cookie
   res.cookie("session", JSON.stringify(user), {
     httpOnly: true,
-    secure: true,
-    sameSite: "none",
+    secure: process.env.NODE_ENV === "production",
+    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
     maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
   });
 
@@ -95,7 +95,10 @@ app.post("/api/auth/login", (req, res) => {
 });
 
 app.post("/api/auth/logout", (req, res) => {
-  res.clearCookie("session", { secure: true, sameSite: "none" });
+  res.clearCookie("session", {
+    secure: process.env.NODE_ENV === "production",
+    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+  });
   res.json({ success: true });
 });
 
