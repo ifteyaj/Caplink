@@ -1,50 +1,53 @@
 # Implementation Status
 
 **Last updated:** 2026-11-11
-**Current phase:** 0 — Project Foundation
-**Branch:** `main` @ `317f1b6` at baseline
+**Current phase:** 1 — Secure Student Accounts (complete) · Phase 2 next
+**Branch:** `main`
 
-## Verified baseline (recorded 2026-11-11, before Phase 0 changes)
+## Phase 1 progress (SPEC-002 — [`docs/specs/002-authentication.md`](../specs/002-authentication.md))
 
-- Git: `main` @ `317f1b6`, clean tree except untracked `docs/`.
-- Runtime: Node v22.18.0, npm 10.9.3.
-- Locked versions: express 4.22.1, better-sqlite3 12.6.2, zod 4.3.6, vite 6.4.1, typescript 5.8.3, tsx 4.21.0.
-- Checks at baseline: `npm run lint` ✅ passed, `npm run build` ✅ passed, **no tests existed**, no CI existed.
-- Database: `caplink.db` at repo root, `user_version 0`, tables `users` + `listings`, **1 user row, 0 listings** (non-empty — legacy adoption path is live).
-- Known bugs at baseline: forgeable JSON session cookies (Phase 1 scope), `INSERT OR REPLACE` returning-user upsert hazard (fixed in Phase 0), no email verification, full contact exposure for logged-in users (Phase 1/3 scope). Full detail: [technical audit](../2026-11-11-phase1-technical-audit.md).
-
-## Phase 0 progress
-
-| Workstream | Status | Notes |
+| Deliverable | Status | Notes |
 |---|---|---|
-| A — Repository baseline | ✅ done | Baseline recorded; docs established; dev server stopped before DB work |
-| B — SQLite migration system | ✅ done | `PRAGMA user_version` runner; legacy adoption verified against the real database |
-| C — Environment configuration | ✅ done | `.env.example` + validated `server/config/env.ts`; production requires built `dist/` |
-| D — Returning-user login bug | ✅ done | Reproduced red in isolated DB, fixed with `ON CONFLICT DO UPDATE`, regression test green |
-| E — Testing infrastructure | ✅ done | Vitest + Supertest; isolated temp DBs; 15 tests green |
-| F — TypeScript strict mode | ✅ done | `strict: true`; typecheck passes for `src/`, `server/`, `tests/` |
-| G — CI pipeline | ✅ done | GitHub Actions: `npm ci` → typecheck → test → build on PRs and `main` |
-| H — Central error handling | ✅ done | Flat backward-compatible envelope `{ error, code, details }` |
-| I — Dependency & security review | ✅ done | All 20 baseline findings classified; see dependency-review.md |
+| Migration `002_authentication.sql` | ✅ done | `users` gains `role`, `email_verified_at`, `updated_at`; emails lowercased; `email_verification_codes` (HMAC hashes) + `sessions` (token hashes) with lookup indexes |
+| Auth service + routes | ✅ done | register/resend/verify/logout/me; single active code per user; attempt cap 5; 10-min expiry; session rotation on verify; no account enumeration |
+| Opaque server-side sessions | ✅ done | SHA-256 token hashes only; HttpOnly `SameSite=Lax` cookie (`Secure` in production); 30-day expiry with lazy deletion |
+| Domain allowlist | ✅ done | `EWU_ALLOWED_EMAIL_DOMAINS` (default `std.ewubd.edu,ewu.edu.bd`); config, not code |
+| Rate limiting | ✅ done | register 20/h/IP · resend 1/60s/email+IP · verify 10/10s/IP → `429 RATE_LIMITED` with `retry_after`; in-memory, per-process (documented) |
+| CSRF origin check | ✅ done | Unsafe methods rejected on Origin/Host mismatch (`403 CSRF_REJECTED`); no-Origin clients pass |
+| `AUTH_SECRET` handling | ✅ done | Required in production (startup fails fast); ephemeral random in dev; never logged |
+| Email sender port | ✅ done | Production sending fails loudly (`EMAIL_NOT_CONFIGURED`) until a provider is configured — deliberate Phase 5 decision; dev returns `dev_code` in the API response |
+| Avatars | ✅ done | Local SVG data-URIs (initials) — closes audit P2-6; no student emails leave the server |
+| Listings routes moved to module | ✅ done | `server/modules/projects/project.routes.ts`, behavior verbatim; contact unlock now requires a *valid* session (forged cookies no longer unlock) |
+| Old login route removed | ✅ done | Passwordless: returning students re-verify via register→OTP |
+| Frontend 2-step login | ✅ done | Email→code modal, 60s resend cooldown, `dev_code` hint shown only in dev builds; `User` type extended (`role`, `email_verified`) |
+| Tests | ✅ done | 57 tests green (was 29): full OTP lifecycle, wrong/expired/consumed/cap-exceeded codes, rotation, server-side logout, rate limits, CSRF, migration 002 (adopt→extend, lowercase, collision rollback), production contracts |
 
 ## Verification evidence (2026-11-11, post-implementation)
 
-- `npm run typecheck` — passed (strict mode on).
-- `npm test` — 29 passed, 0 failed.
-- `npm run build` — passed.
-- Migration adoption on the real `caplink.db` — `user_version 0 → 1`, user row preserved, backup file created, `PRAGMA foreign_key_check` clean; restart logged `database up to date` (idempotent).
-- D4 regression — **red against the legacy `INSERT OR REPLACE`**: the user row was deleted and recreated (rowid changed 1 → 2, `created_at` clobbered). Green with the corrected `ON CONFLICT DO UPDATE` upsert. Note: the audit's prediction of an FK-driven 500 on login was **empirically falsified** — SQLite checks `NO ACTION` foreign keys at statement level, so the same-id REPLACE never violates the FK; the real damage was row recreation, which the test now catches deterministically via `rowid`.
-- Dependency review — 25 → 9 audit findings after non-forced fixes; remaining criticals are dev-only vitest-chain items (see dependency-review.md).
+- `npm run typecheck` — passed (strict, 0 errors).
+- `npm test` (`npx vitest run`) — **57 passed, 0 failed** across 5 files.
+- `npm run build` — passed (production frontend).
+- Real-database migration — `npm run dev` applied `002_authentication.sql` to the actual `caplink.db`: `user_version 1 → 2`; the legacy user row preserved as `role: student`, `email_verified_at: null` (no invented trust); `sessions`/`email_verification_codes` created empty; backup file created by the runner.
+- Live API checks against the real server — anonymous `GET /api/auth/me` → `{user: null}`; register with `2024-1-12-345@std.ewubd.edu` → `200` with `dev_code` (dev mode); register with the legacy `gmail.com` address → `400 INVALID_EMAIL_DOMAIN` (expected: the allowlist now excludes gmail-pattern addresses).
 
 ## Deferred / known limitations
 
-- Authentication is still the demo JSON-cookie session — intentionally unchanged until Phase 1. Tests document its current behavior only; they do not certify security.
-- `src/` frontend is untouched in Phase 0 (no router, no error boundaries, listing validation gaps remain — see audit P2 items).
-- No seed script (not required by SPEC-001 deliverables).
-- Zod details shape changed from raw `issues` to `{ path, message }` entries in `POST /api/listings` error responses — frontend does not consume `details`, so no behavioral break.
-- Remaining audit criticals (`vitest`, `tinypool` — dev-only) require a vitest 3 → 5 semver-major upgrade; deliberately deferred to a dedicated change per SPEC-001 I3.
+- **No email provider configured** — production registration fails with `EMAIL_NOT_CONFIGURED` by design until a provider is chosen (Phase 5 pre-pilot decision). Development delivers via `dev_code`.
+- **In-memory rate limits** — per-process, reset on restart; acceptable at pilot scale, revisited at deployment.
+- **Allowlist default unconfirmed** — `std.ewubd.edu` / `ewu.edu.bd` must be confirmed with currently enrolled students before launch (config-only change; open product decision).
+- **Legacy gmail user** — the one existing user (`2022-1-60-002@gmail.com`) is preserved in the database but can no longer register that address; they must re-register with their real EWU address (data intact, no listings to lose).
+- **`users.name`** — transitional field; moves to `student_profiles` in Phase 2.
+- Email is plaintext in the API's dev response only (`dev_code`, non-production builds); codes/tokens/secrets are never logged server-side.
 
 ## Untested areas / risks
 
-- Production mode (`NODE_ENV=production`) verified by code review only — no production deployment run in this phase.
-- CI verified: first GitHub Actions run (43054987008) passed — `npm ci` → strict typecheck → 29 tests → production build all green.
+- Real SMTP/email delivery — untested (no provider yet).
+- Production deployment run — not exercised in this phase; cookie `Secure` flag and startup `AUTH_SECRET` gate verified by tests/code review only.
+- Multi-instance deployments would need shared rate-limit state (documented, out of scope).
+
+## Phase 0 record (retained)
+
+- Baseline `main` @ `317f1b6`; checks then: lint ✅, build ✅, no tests/CI.
+- Phase 0 delivered: migration system with legacy adoption, env contract, `ON CONFLICT DO UPDATE` upsert fix (D4 regression test), Vitest+Supertest infra, strict TS, CI (`npm ci` → typecheck → test → build), flat error envelope `{ error, code, details }`, dependency review (25 → 9 findings; remaining criticals dev-only, vitest 3→5 upgrade deferred).
+- Audit addendum: P1-1 (FK 500 prediction) was empirically falsified — SQLite checks `NO ACTION` FKs at statement level; the real defect was row recreation (rowid change, `created_at` clobber), caught deterministically by the rowid regression test.
+- Phase 0 CI run 43054987008: green.

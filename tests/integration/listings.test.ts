@@ -11,7 +11,7 @@ import {
 const apps: TestApp[] = [];
 
 function freshApp(): TestApp {
-  const testApp = buildTestApp();
+  const testApp = buildTestApp({ devCodeDelivery: true });
   apps.push(testApp);
   return testApp;
 }
@@ -20,8 +20,17 @@ afterAll(() => {
   for (const app of apps) app.cleanup();
 });
 
-function login(app: TestApp["app"]) {
-  return request(app).post("/api/auth/login").send({ email: VALID_EMAIL, name: "Ada" });
+/** Register + verify an account, returning the verify response (session cookie). */
+async function verifyAccount(testApp: TestApp, email: string, name: string) {
+  const register = await request(testApp.app)
+    .post("/api/auth/register")
+    .send({ email, name });
+  expect(register.status).toBe(200);
+  const verify = await request(testApp.app)
+    .post("/api/auth/verify-email")
+    .send({ email, code: register.body.dev_code });
+  expect(verify.status).toBe(200);
+  return verify;
 }
 
 describe("listings", () => {
@@ -33,24 +42,42 @@ describe("listings", () => {
   });
 
   it("locks contact info for anonymous visitors and unlocks it for logged-in users", async () => {
-    const { app } = freshApp();
-    const auth = await login(app);
-    await request(app)
+    const testApp = freshApp();
+    const auth = await verifyAccount(testApp, VALID_EMAIL, "Ada");
+    await request(testApp.app)
       .post("/api/listings")
       .set("Cookie", sessionCookie(auth))
       .send(validListingPayload);
 
-    const anon = await request(app).get("/api/listings");
+    const anon = await request(testApp.app).get("/api/listings");
     expect(anon.status).toBe(200);
     expect(anon.body).toHaveLength(1);
     expect(anon.body[0].is_locked).toBe(true);
     expect(anon.body[0].email).toBeNull();
     expect(anon.body[0].facebook).toBeNull();
 
-    const authed = await request(app).get("/api/listings").set("Cookie", sessionCookie(auth));
+    const authed = await request(testApp.app)
+      .get("/api/listings")
+      .set("Cookie", sessionCookie(auth));
     expect(authed.status).toBe(200);
     expect(authed.body[0].is_locked).toBeUndefined();
     expect(authed.body[0].email).toBe(VALID_EMAIL);
+  });
+
+  it("unlocks contact info only for a valid session token, not a garbage one", async () => {
+    const testApp = freshApp();
+    const auth = await verifyAccount(testApp, VALID_EMAIL, "Ada");
+    await request(testApp.app)
+      .post("/api/listings")
+      .set("Cookie", sessionCookie(auth))
+      .send(validListingPayload);
+
+    // A forged cookie must NOT unlock contact info (old parse-any-cookie behavior).
+    const forged = await request(testApp.app)
+      .get("/api/listings")
+      .set("Cookie", "session={\"id\":\"hacker\"}");
+    expect(forged.body[0].is_locked).toBe(true);
+    expect(forged.body[0].email).toBeNull();
   });
 
   it("rejects unauthenticated listing creation with 401", async () => {
@@ -61,9 +88,9 @@ describe("listings", () => {
   });
 
   it("creates a listing for an authenticated user", async () => {
-    const { app, database } = freshApp();
-    const auth = await login(app);
-    const res = await request(app)
+    const testApp = freshApp();
+    const auth = await verifyAccount(testApp, VALID_EMAIL, "Ada");
+    const res = await request(testApp.app)
       .post("/api/listings")
       .set("Cookie", sessionCookie(auth))
       .send(validListingPayload);
@@ -71,7 +98,7 @@ describe("listings", () => {
     expect(res.body.success).toBe(true);
     expect(typeof res.body.id).toBe("string");
 
-    const row = database.db.prepare("SELECT * FROM listings WHERE id = ?").get(res.body.id) as
+    const row = testApp.database.db.prepare("SELECT * FROM listings WHERE id = ?").get(res.body.id) as
       | { user_id: string; skills: string; email: string; facebook: string }
       | undefined;
     expect(row).toBeDefined();
@@ -82,9 +109,9 @@ describe("listings", () => {
   });
 
   it("returns structured validation errors for invalid listings", async () => {
-    const { app } = freshApp();
-    const auth = await login(app);
-    const res = await request(app)
+    const testApp = freshApp();
+    const auth = await verifyAccount(testApp, VALID_EMAIL, "Ada");
+    const res = await request(testApp.app)
       .post("/api/listings")
       .set("Cookie", sessionCookie(auth))
       .send({ ...validListingPayload, project_idea: "short" });
@@ -96,63 +123,60 @@ describe("listings", () => {
   });
 
   it("counts active listings in /api/stats", async () => {
-    const { app } = freshApp();
-    const auth = await login(app);
-    await request(app)
+    const testApp = freshApp();
+    const auth = await verifyAccount(testApp, VALID_EMAIL, "Ada");
+    await request(testApp.app)
       .post("/api/listings")
       .set("Cookie", sessionCookie(auth))
       .send({ ...validListingPayload, type: "group", slots_open: 2 });
 
-    const res = await request(app).get("/api/stats");
+    const res = await request(testApp.app).get("/api/stats");
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ total: 1, solo: 0, groups: 1 });
   });
 
   it("scopes deletion to the listing owner", async () => {
-    const { app } = freshApp();
-    const owner = await request(app)
-      .post("/api/auth/login")
-      .send({ email: VALID_EMAIL, name: "Owner" });
-    const created = await request(app)
+    const testApp = freshApp();
+    const ownerEmail = VALID_EMAIL;
+    const otherEmail = "2024-9-99-999@std.ewubd.edu";
+
+    const owner = await verifyAccount(testApp, ownerEmail, "Owner");
+    const created = await request(testApp.app)
       .post("/api/listings")
       .set("Cookie", sessionCookie(owner))
       .send(validListingPayload);
     const listingId = created.body.id as string;
 
     // Anonymous deletion
-    const anon = await request(app).delete(`/api/listings/${listingId}`);
+    const anon = await request(testApp.app).delete(`/api/listings/${listingId}`);
     expect(anon.status).toBe(401);
 
-    // A different user's deletion
-    const other = await request(app)
-      .post("/api/auth/login")
-      .send({ email: "2024-9-99-999@gmail.com", name: "Other" });
-    const notOwner = await request(app)
+    // A different verified user's deletion
+    const other = await verifyAccount(testApp, otherEmail, "Other");
+    const notOwner = await request(testApp.app)
       .delete(`/api/listings/${listingId}`)
       .set("Cookie", sessionCookie(other));
     expect(notOwner.status).toBe(404);
 
     // Owner deletion succeeds
-    const deleted = await request(app)
+    const deleted = await request(testApp.app)
       .delete(`/api/listings/${listingId}`)
       .set("Cookie", sessionCookie(owner));
     expect(deleted.status).toBe(200);
-    const remaining = await request(app).get("/api/stats");
+    const remaining = await request(testApp.app).get("/api/stats");
     expect(remaining.body.total).toBe(0);
   });
 
   it("returns only the authenticated user's listings from /api/my-listings", async () => {
-    const { app } = freshApp();
-    const owner = await login(app);
-    await request(app)
+    const testApp = freshApp();
+    const owner = await verifyAccount(testApp, VALID_EMAIL, "Owner");
+    await request(testApp.app)
       .post("/api/listings")
       .set("Cookie", sessionCookie(owner))
       .send(validListingPayload);
 
-    const other = await request(app)
-      .post("/api/auth/login")
-      .send({ email: "2024-1-99-111@gmail.com", name: "Other" });
-    const res = await request(app)
+    const other = await verifyAccount(testApp, "2024-1-99-111@std.ewubd.edu", "Other");
+    const res = await request(testApp.app)
       .get("/api/my-listings")
       .set("Cookie", sessionCookie(other));
     expect(res.status).toBe(200);

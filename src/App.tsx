@@ -7,79 +7,194 @@ import { Listing, MAJORS, SKILLS, cn } from './types';
 // --- Components ---
 
 const LoginModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) => {
-  const { login } = useAuth();
+  const { requestCode, verifyCode } = useAuth();
+  const [step, setStep] = useState<'email' | 'code'>('email');
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
+  const [code, setCode] = useState('');
   const [error, setError] = useState('');
+  const [sentNote, setSentNote] = useState('');
+  const [devCode, setDevCode] = useState('');
   const [loading, setLoading] = useState(false);
+  const [resendIn, setResendIn] = useState(0);
+
+  // Reset the flow whenever the modal opens or closes.
+  useEffect(() => {
+    if (isOpen) {
+      setStep('email');
+      setEmail('');
+      setName('');
+      setCode('');
+      setError('');
+      setSentNote('');
+      setDevCode('');
+      setLoading(false);
+      setResendIn(0);
+    }
+  }, [isOpen]);
+
+  // Countdown for the resend button (mirrors the server's 60s cooldown).
+  useEffect(() => {
+    if (resendIn <= 0) return;
+    const timer = setInterval(() => setResendIn((s) => Math.max(0, s - 1)), 1000);
+    return () => clearInterval(timer);
+  }, [resendIn]);
 
   if (!isOpen) return null;
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleRequestCode = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
-    const result = await login(email, name);
+    const result = await requestCode(email, name);
+    setLoading(false);
+    if (result.success) {
+      setStep('code');
+      setSentNote(`We sent a 6-digit code to ${email}. It expires in 10 minutes.`);
+      setDevCode(result.devCode || '');
+      setResendIn(60);
+    } else {
+      setError(result.error || 'Could not send a verification code.');
+    }
+  };
+
+  const handleResend = async () => {
+    if (resendIn > 0) return;
+    setError('');
+    const result = await requestCode(email);
+    if (result.success) {
+      setDevCode(result.devCode || '');
+      setResendIn(60);
+      setSentNote(`A new code was sent to ${email}.`);
+    } else {
+      setError(result.error || 'Could not resend the code.');
+    }
+  };
+
+  const handleVerify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    const result = await verifyCode(email, code);
+    setLoading(false);
     if (result.success) {
       onClose();
     } else {
-      setError(result.error || 'Login failed');
+      setError(result.error || 'Verification failed.');
     }
-    setLoading(false);
   };
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         onClick={onClose}
         className="absolute inset-0 bg-background/80 backdrop-blur-sm"
       />
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, scale: 0.95, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         className="relative w-full max-w-md glass rounded-3xl p-8 shadow-2xl"
       >
-        <h2 className="text-2xl font-display mb-2">Welcome to Caplink</h2>
-        <p className="text-sm text-muted mb-6">Enter your university details to continue.</p>
-        
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <label className="text-xs font-bold text-muted uppercase tracking-wider">Full Name</label>
-            <input 
-              required
-              value={name}
-              onChange={e => setName(e.target.value)}
-              className="w-full bg-white/5 border border-border rounded-xl px-4 py-2.5 text-sm focus:border-primary outline-none transition-all"
-              placeholder="John Doe"
-            />
-          </div>
-          <div className="space-y-2">
-            <label className="text-xs font-bold text-muted uppercase tracking-wider">University Email</label>
-            <input 
-              required
-              type="email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              className="w-full bg-white/5 border border-border rounded-xl px-4 py-2.5 text-sm focus:border-primary outline-none transition-all"
-              placeholder="2024-1-12-345@gmail.com"
-            />
-          </div>
+        {step === 'email' ? (
+          <>
+            <h2 className="text-2xl font-display mb-2">Welcome to Caplink</h2>
+            <p className="text-sm text-muted mb-6">Sign in with your university email — we'll send you a one-time code. No password needed.</p>
 
-          {error && <p className="text-xs text-red-400 font-medium">{error}</p>}
+            <form onSubmit={handleRequestCode} className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-muted uppercase tracking-wider">University Email</label>
+                <input
+                  required
+                  type="email"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  className="w-full bg-white/5 border border-border rounded-xl px-4 py-2.5 text-sm focus:border-primary outline-none transition-all"
+                  placeholder="2024-1-12-345@std.ewubd.edu"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-muted uppercase tracking-wider">
+                  Full Name <span className="text-[10px] normal-case font-medium">(optional)</span>
+                </label>
+                <input
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  className="w-full bg-white/5 border border-border rounded-xl px-4 py-2.5 text-sm focus:border-primary outline-none transition-all"
+                  placeholder="John Doe"
+                />
+              </div>
 
-          <button 
-            disabled={loading}
-            className="w-full py-3 bg-primary hover:bg-primary/90 text-white rounded-xl text-sm font-bold transition-all shadow-lg shadow-primary/20 disabled:opacity-50"
-          >
-            {loading ? 'Verifying...' : 'Sign In'}
-          </button>
-        </form>
-        
+              {error && <p className="text-xs text-red-400 font-medium">{error}</p>}
+
+              <button
+                disabled={loading}
+                className="w-full py-3 bg-primary hover:bg-primary/90 text-white rounded-xl text-sm font-bold transition-all shadow-lg shadow-primary/20 disabled:opacity-50"
+              >
+                {loading ? 'Sending code...' : 'Send Code'}
+              </button>
+            </form>
+          </>
+        ) : (
+          <>
+            <h2 className="text-2xl font-display mb-2">Check your inbox</h2>
+            <p className="text-sm text-muted mb-6">{sentNote}</p>
+
+            <form onSubmit={handleVerify} className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-muted uppercase tracking-wider">Verification Code</label>
+                <input
+                  required
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  value={code}
+                  onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  className="w-full bg-white/5 border border-border rounded-xl px-4 py-3 text-center text-xl tracking-[0.5em] font-bold focus:border-primary outline-none transition-all"
+                  placeholder="······"
+                  autoFocus
+                />
+              </div>
+
+              {import.meta.env.DEV && devCode && (
+                <p className="text-[11px] text-amber-300/90 font-mono bg-amber-500/5 border border-amber-500/20 rounded-lg px-3 py-2">
+                  DEV ONLY — your code: {devCode}
+                </p>
+              )}
+
+              {error && <p className="text-xs text-red-400 font-medium">{error}</p>}
+
+              <button
+                disabled={loading || code.length !== 6}
+                className="w-full py-3 bg-primary hover:bg-primary/90 text-white rounded-xl text-sm font-bold transition-all shadow-lg shadow-primary/20 disabled:opacity-50"
+              >
+                {loading ? 'Verifying...' : 'Verify & Sign In'}
+              </button>
+            </form>
+
+            <div className="mt-4 flex items-center justify-between text-xs">
+              <button
+                type="button"
+                onClick={() => { setStep('email'); setError(''); }}
+                className="text-muted hover:text-white transition-colors"
+              >
+                ← Wrong email?
+              </button>
+              <button
+                type="button"
+                onClick={handleResend}
+                disabled={resendIn > 0}
+                className="text-primary hover:underline disabled:text-muted disabled:no-underline transition-all"
+              >
+                {resendIn > 0 ? `Resend code in ${resendIn}s` : 'Resend code'}
+              </button>
+            </div>
+          </>
+        )}
+
         <p className="mt-6 text-[10px] text-center text-muted uppercase tracking-widest leading-relaxed">
-          Only university accounts (YYYY-#-##-###@gmail.com) <br /> are allowed to post or contact members.
+          Only verified university accounts <br /> (std.ewubd.edu / ewu.edu.bd) can participate.
         </p>
       </motion.div>
     </div>

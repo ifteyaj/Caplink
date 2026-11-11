@@ -1,7 +1,7 @@
 # Caplink — Product Overview
 
 **For:** anyone who wants to understand what Caplink is, who it's for, and where it's going — without reading the full technical specification.
-**Last updated:** 2026-11-11 · **Status:** Phase 0 complete, Phase 1 next
+**Last updated:** 2026-11-11 · **Status:** Phase 0 + 1 complete, Phase 2 next
 
 ---
 
@@ -29,9 +29,9 @@ Caplink is a working web app with a real core loop — you can log in, browse li
 
 - **Explore page** — browse student listings, search by name/idea/skill, filter by type (looking-for-group vs group-needs-members) and major.
 - **Listings** — post a capstone opportunity with your course, major, project idea, skills needed, and open slots; delete your own listings.
-- **Accounts** — sign in with an EWU-format student email; the platform remembers you between visits.
+- **Accounts** — sign in by verifying a university email with a one-time code (no password); the platform remembers you between visits with a secure server-side session.
 
-**What is deliberately not production-ready yet:** login is still the original demo mechanism (a signed-in cookie, not real verification), and contact details are visible to any logged-in user. Both are scheduled to be replaced in Phase 1 and Phase 3 — they are the top-priority items on the roadmap, not accidents. The technical audit in `docs/` lists every known issue.
+**What is deliberately not production-ready yet:** production email delivery is not configured (registration fails clearly until a provider is chosen in Phase 5 pre-pilot), the exact email domain allowlist still needs confirmation from currently enrolled students, and contact details are visible to any verified logged-in user. The contact model is scheduled to be replaced in Phase 3/4 — it is on the roadmap, not an accident. The technical audit in `docs/` lists every known issue.
 
 ## What it will do (the plan)
 
@@ -40,7 +40,7 @@ Development is phased; each phase must fully pass its exit condition before the 
 | Phase | What students get | Status |
 |---|---|---|
 | 0 — Foundation | Nothing visible — reliable migrations, tests, CI, strict type-safety underneath everything | ✅ **Complete** |
-| 1 — Trusted accounts | Real email verification (one-time code), secure server-side sessions, rate limiting | ⏳ Next |
+| 1 — Trusted accounts | Real email verification (one-time code), secure server-side sessions, rate limiting | ✅ **Complete** |
 | 2 — Student profiles | A reusable profile: name, department, year, skills, interests, intro | Planned |
 | 3 — Project discovery | The listing model becomes real **projects**: titles, descriptions, required skills, open slots, statuses (active/filled/closed), better search | Planned |
 | 4 — Connections | Request-to-join flow: send, accept, decline, cancel — and only after an accepted connection is any contact detail shared, only if chosen | Planned |

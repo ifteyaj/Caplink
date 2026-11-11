@@ -20,19 +20,19 @@ function seedLegacyData(db: DB): void {
 }
 
 describe("migration runner", () => {
-  it("initializes a fresh database to the baseline version", () => {
+  it("initializes a fresh database to the current version", () => {
     const { db, cleanup } = createRawDatabase();
     try {
       const result = runMigrations(db, { migrationsDir: MIGRATIONS_DIR });
-      expect(result.applied).toEqual([1]);
-      expect(result.toVersion).toBe(1);
+      expect(result.applied).toEqual([1, 2]);
+      expect(result.toVersion).toBe(2);
       const tables = db
         .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")
         .all()
         .map((row) => (row as { name: string }).name)
         .sort();
-      expect(tables).toEqual(["listings", "users"]);
-      expect(getUserVersion(db)).toBe(1);
+      expect(tables).toEqual(["email_verification_codes", "listings", "sessions", "users"]);
+      expect(getUserVersion(db)).toBe(2);
       expect(db.pragma("foreign_keys", { simple: true })).toBe(1);
     } finally {
       cleanup();
@@ -50,8 +50,8 @@ describe("migration runner", () => {
       });
 
       expect(result.adoptedLegacy).toBe(true);
-      expect(result.toVersion).toBe(1);
-      expect(getUserVersion(legacy.db)).toBe(1);
+      expect(result.toVersion).toBe(2);
+      expect(getUserVersion(legacy.db)).toBe(2);
 
       const user = legacy.db
         .prepare("SELECT id, email, name FROM users WHERE id = ?")
@@ -94,15 +94,19 @@ describe("migration runner", () => {
         path.join(MIGRATIONS_DIR, "001_initial_schema.sql"),
         path.join(directory, "001_initial_schema.sql"),
       );
+      fs.copyFileSync(
+        path.join(MIGRATIONS_DIR, "002_authentication.sql"),
+        path.join(directory, "002_authentication.sql"),
+      );
       fs.writeFileSync(
-        path.join(directory, "002_doomed.sql"),
+        path.join(directory, "003_doomed.sql"),
         "CREATE TABLE doomed (id INTEGER NOT NULL);\nINSERT INTO table_that_does_not_exist VALUES (1);\n",
       );
 
       const { db, cleanup } = createTestDatabase();
       try {
         expect(() => runMigrations(db, { migrationsDir: directory })).toThrow(/failed and was rolled back/);
-        expect(getUserVersion(db)).toBe(1);
+        expect(getUserVersion(db)).toBe(2);
         const doomed = db
           .prepare("SELECT name FROM sqlite_master WHERE name = 'doomed'")
           .get();
@@ -120,9 +124,9 @@ describe("migration runner", () => {
     try {
       const first = runMigrations(db, { migrationsDir: MIGRATIONS_DIR });
       const second = runMigrations(db, { migrationsDir: MIGRATIONS_DIR });
-      expect(first.applied).toEqual([1]);
+      expect(first.applied).toEqual([1, 2]);
       expect(second.applied).toEqual([]);
-      expect(second.toVersion).toBe(1);
+      expect(second.toVersion).toBe(2);
     } finally {
       cleanup();
     }
@@ -138,6 +142,103 @@ describe("migration runner", () => {
       }).toThrow(/FOREIGN KEY/);
     } finally {
       cleanup();
+    }
+  });
+});
+
+describe("migration 002 (authentication)", () => {
+  it("extends an adopted v1 database with auth columns and tables, preserving data", () => {
+    const legacy = createLegacyDatabase(seedLegacyData);
+    try {
+      const result = runMigrations(legacy.db, {
+        migrationsDir: MIGRATIONS_DIR,
+        databasePath: legacy.filePath,
+      });
+      // Adoption stamps v1, then 002 applies on top.
+      expect(result.applied).toEqual([2]);
+      expect(result.toVersion).toBe(2);
+
+      // Existing user becomes an unverified student — no invented trust.
+      const user = legacy.db
+        .prepare("SELECT id, email, role, email_verified_at FROM users WHERE id = ?")
+        .get("u1") as { id: string; email: string; role: string; email_verified_at: string | null };
+      expect(user.role).toBe("student");
+      expect(user.email_verified_at).toBeNull();
+
+      // Listing untouched, still joins to its owner.
+      expect(
+        legacy.db.prepare("SELECT user_id FROM listings WHERE id = 'l1'").get(),
+      ).toEqual({ user_id: "u1" });
+
+      // New tables and their lookup indexes exist.
+      const tables = legacy.db
+        .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")
+        .all()
+        .map((row) => (row as { name: string }).name)
+        .sort();
+      expect(tables).toContain("email_verification_codes");
+      expect(tables).toContain("sessions");
+      const indexNames = legacy.db
+        .prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND name LIKE 'idx_%'")
+        .all()
+        .map((row) => (row as { name: string }).name)
+        .sort();
+      expect(indexNames).toEqual(
+        expect.arrayContaining(["idx_verification_codes_user_id", "idx_sessions_user_id"]),
+      );
+
+      expect(legacy.db.pragma("foreign_key_check")).toHaveLength(0);
+    } finally {
+      legacy.cleanup();
+    }
+  });
+
+  it("normalizes existing emails to lowercase", () => {
+    const legacy = createLegacyDatabase((db) => {
+      db.prepare("INSERT INTO users (id, email, name) VALUES (?, ?, ?)").run(
+        "u2",
+        "Mixed.Case@Std.ewubd.edu",
+        "Case User",
+      );
+    });
+    try {
+      runMigrations(legacy.db, { migrationsDir: MIGRATIONS_DIR });
+      const row = legacy.db.prepare("SELECT email FROM users WHERE id = 'u2'").get() as {
+        email: string;
+      };
+      expect(row.email).toBe("mixed.case@std.ewubd.edu");
+    } finally {
+      legacy.cleanup();
+    }
+  });
+
+  it("aborts (and rolls back) when lowercasing collides two emails", () => {
+    const legacy = createLegacyDatabase((db) => {
+      db.prepare("INSERT INTO users (id, email, name) VALUES (?, ?, ?)").run(
+        "u2",
+        "User.A@Std.ewubd.edu",
+        "Upper",
+      );
+      db.prepare("INSERT INTO users (id, email, name) VALUES (?, ?, ?)").run(
+        "u3",
+        "user.a@std.ewubd.edu",
+        "Lower",
+      );
+    });
+    try {
+      expect(() =>
+        runMigrations(legacy.db, { migrationsDir: MIGRATIONS_DIR }),
+      ).toThrow(/failed and was rolled back/);
+
+      // Adoption stamped v1; 002 was rolled back — original mixed-case data intact.
+      expect(getUserVersion(legacy.db)).toBe(1);
+      const emails = legacy.db
+        .prepare("SELECT email FROM users WHERE id IN ('u2', 'u3') ORDER BY id")
+        .all()
+        .map((row) => (row as { email: string }).email);
+      expect(emails).toEqual(["User.A@Std.ewubd.edu", "user.a@std.ewubd.edu"]);
+    } finally {
+      legacy.cleanup();
     }
   });
 });

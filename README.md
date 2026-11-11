@@ -15,7 +15,11 @@ Open http://localhost:3000. On first launch the server creates the SQLite databa
 
 ### Environment
 
-Copy `.env.example` to `.env` and adjust. Validated at startup: `NODE_ENV` (development/production/test), `PORT`, `DATABASE_PATH`. In production the built `dist/` must exist (`npm run build`) or startup fails clearly.
+Copy `.env.example` to `.env` and adjust. Validated at startup: `NODE_ENV` (development/production/test), `PORT`, `DATABASE_PATH`, `EWU_ALLOWED_EMAIL_DOMAINS` (comma-separated university domains allowed to register), `AUTH_SECRET` (required in production — generate with `openssl rand -hex 32`; an ephemeral secret is generated in development). In production the built `dist/` must exist (`npm run build`) or startup fails clearly.
+
+### Authentication (Phase 1)
+
+Sign-in is passwordless email verification: enter a university email from the allowed domains → receive a one-time 6-digit code (valid 10 minutes, max 5 attempts) → get a verified session. Sessions are opaque server-side records; only their SHA-256 hashes are stored, delivered as HttpOnly `SameSite=Lax` cookies. In development the code is returned in the API response (`dev_code`) and shown in the login modal; **production email sending fails loudly until a provider is configured** (planned before pilot launch). Rate limits and cross-origin (CSRF) checks protect the auth endpoints.
 
 ### Checks
 
