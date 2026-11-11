@@ -30,10 +30,11 @@
 ## Verification evidence (2026-11-11, post-implementation)
 
 - `npm run typecheck` — passed (strict mode on).
-- `npm test` — 15 passed, 0 failed.
+- `npm test` — 29 passed, 0 failed.
 - `npm run build` — passed.
-- Migration adoption on the real `caplink.db` — `user_version 0 → 1`, user row preserved, backup file created, `PRAGMA foreign_key_check` clean.
-- D4 regression — failed with old `INSERT OR REPLACE` SQL (FOREIGN KEY constraint failed), passes with the corrected upsert.
+- Migration adoption on the real `caplink.db` — `user_version 0 → 1`, user row preserved, backup file created, `PRAGMA foreign_key_check` clean; restart logged `database up to date` (idempotent).
+- D4 regression — **red against the legacy `INSERT OR REPLACE`**: the user row was deleted and recreated (rowid changed 1 → 2, `created_at` clobbered). Green with the corrected `ON CONFLICT DO UPDATE` upsert. Note: the audit's prediction of an FK-driven 500 on login was **empirically falsified** — SQLite checks `NO ACTION` foreign keys at statement level, so the same-id REPLACE never violates the FK; the real damage was row recreation, which the test now catches deterministically via `rowid`.
+- Dependency review — 25 → 9 audit findings after non-forced fixes; remaining criticals are dev-only vitest-chain items (see dependency-review.md).
 
 ## Deferred / known limitations
 
@@ -41,6 +42,7 @@
 - `src/` frontend is untouched in Phase 0 (no router, no error boundaries, listing validation gaps remain — see audit P2 items).
 - No seed script (not required by SPEC-001 deliverables).
 - Zod details shape changed from raw `issues` to `{ path, message }` entries in `POST /api/listings` error responses — frontend does not consume `details`, so no behavioral break.
+- Remaining audit criticals (`vitest`, `tinypool` — dev-only) require a vitest 3 → 5 semver-major upgrade; deliberately deferred to a dedicated change per SPEC-001 I3.
 
 ## Untested areas / risks
 

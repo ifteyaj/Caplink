@@ -191,3 +191,11 @@ Ownership check on DELETE is correct (`AND user_id = ?`, server.ts:187). `requir
 3. **Profiles (priority #2):** new `profiles` table + migration; `users.name` currently doubles as display name with no update path.
 4. **Listings (priority #3):** P1-2 (edit/soft-delete) → P1-3/P1-4 validation hardening → P2-1/P2-2 UI error handling → P0-3 contact-reveal flow (designed together with #4).
 5. **Connections (priority #4):** `connection_requests` table depends on the contact-reveal audit log from step 4 — build these as one unit.
+
+---
+
+## Post-audit verification addendum (2026-11-11, Phase 0)
+
+**P1-1 outcome — prediction partially falsified.** The predicted FK-driven 500 on returning-user login **does not occur**: SQLite enforces `NO ACTION` foreign keys at statement level, so an `INSERT OR REPLACE` that recreates the same-id parent row satisfies the FK. The real, empirically verified damage of the legacy upsert is **row recreation**: the `users` row is deleted and reinserted on every login, changing its `rowid` and resetting `created_at`. The regression test written for SPEC-001 Workstream D now fails against the legacy SQL (rowid `1 → 2`) and passes with the corrected `ON CONFLICT(id) DO UPDATE` upsert, which preserves row identity, `created_at`, and listings. Severity is lower than predicted, but the fix remains correct and required by the locked spec.
+
+**Also verified during Phase 0:** dependency review reduced findings from 25 to 9 (all 12 high + the `proxy-addr` critical resolved via non-forced fixes); remaining criticals are dev-only vitest-chain items documented in `docs/project/dependency-review.md`.
