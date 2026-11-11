@@ -47,4 +47,4 @@
 ## Untested areas / risks
 
 - Production mode (`NODE_ENV=production`) verified by code review only — no production deployment run in this phase.
-- CI verified locally by reproducing its steps; first GitHub Actions run pending on next push.
+- CI verified: first GitHub Actions run (43054987008) passed — `npm ci` → strict typecheck → 29 tests → production build all green.
