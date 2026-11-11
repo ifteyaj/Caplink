@@ -6,6 +6,8 @@ Documentation index for the Caplink project — an EWU-only platform for discove
 
 | Document | Purpose |
 |---|---|
+| [`CURRENT-STATUS.md`](CURRENT-STATUS.md) | One-page orientation: where the project is right now |
+| [`product-overview.md`](product-overview.md) | What Caplink is, who it's for, what it does and will do |
 | [`project/roadmap.md`](project/roadmap.md) | Phase 0–5 plan with exit conditions |
 | [`project/implementation-status.md`](project/implementation-status.md) | Current state: completed, verified, deferred, limitations |
 | [`project/changelog.md`](project/changelog.md) | Dated record of meaningful changes |

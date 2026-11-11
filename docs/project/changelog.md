@@ -2,6 +2,13 @@
 
 All meaningful changes to Caplink. Format: dated entries, most recent first.
 
+## 2026-11-11 — Documentation closeout & Phase 1 readiness
+
+- Pushed Phase 0 to `origin/main` (first CI run triggered on push).
+- Added `docs/product-overview.md` — plain-language product explanation (what it is, who it's for, what it does and will do).
+- Added `docs/CURRENT-STATUS.md` — one-page orientation consumed at session start.
+- Updated docs index and this changelog.
+
 ## 2026-11-11 — Phase 0: Project Foundation
 
 Implemented per SPEC-001 (approved). Verified: typecheck (strict) ✅ · 29/29 tests ✅ · build ✅ · real-database migration adoption ✅.
