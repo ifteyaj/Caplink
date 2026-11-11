@@ -2,6 +2,18 @@
 
 All meaningful changes to Caplink. Format: dated entries, most recent first.
 
+## 2026-11-11 — Explore page redesign (frontend-only)
+
+- **Light theme replaces the dark glass UI.** New design tokens in `src/index.css` `@theme` (page `#F8F9FE`, surface `#FFFFFF`, primary indigo `#4938DF`, secondary purple `#7668EF`, ink `#171A3B`, muted `#747895`, border `#E8E9F4`, lavender `#F0EEFF`, soft blue `#EAF3FF`, soft green `#E9F8F1`, soft orange `#FFF2E8`); the `.glass`/`.card-gradient`/`.contact-blur` utilities are removed; a global `:focus-visible` outline and `.card`/`.input`/`.label`/`.btn-primary`/`.btn-secondary` utilities were added.
+- **Sidebar navigation** (`src/components/Sidebar.tsx`, 240px) — fixed left sidebar on desktop (Explore / My Listings / Create Listing / East West University branding + "Find your people. Build your capstone." tagline) and a compact sticky top bar on mobile. "Connections" and "My Profile" are deliberately not shown — the features do not exist yet. Create Listing / My Listings open the login modal when signed out.
+- **Explore page rebuilt** (`src/components/ExplorePage.tsx` + `ExploreCard.tsx`, `ListingDetailsModal.tsx`, `EmptyState.tsx`, `LoadingSkeleton.tsx`) against the supplied reference: campus-inspired hero with an accented "capstone team" heading and subtle SVG silhouette, prominent search bar with an inline Search button (Enter submits, X clears), four major chips, All/Solo/Group type filter, right-aligned Most Recent/Oldest sort, two-column card grid.
+- **Horizontal discovery cards**: tinted major panel (icon + name) on the left with a colored card edge stripe (soft blue / indigo / green / orange per major), initiative (`project_idea`, line-clamped) as the main text on the right, compact Solo/Group badge, skill chips (safe JSON parse, `+N` overflow), "N members needed" (group with `slots_open` only), and an outlined View Details pill. No bookmark icon, no deadlines, no student names/photos/years.
+- **`MAJORS` reduced 8 → 4 intended categories** in `src/types.ts` (`major` is a free-text column with 0 listing rows — no migration needed); the Post Listing form and filter chips were updated together.
+- **My Listings now calls the real `GET /api/my-listings`** (previously derived client-side from the public feed) with delete via `DELETE /api/listings/:id` (confirm dialog, inline error notice).
+- **States**: skeleton loading, "No capstone initiatives yet" empty state, "No matching initiatives found" with clear-filters action, and an error state with Retry. The PostForm `alert()` was replaced with an inline error that parses the flat `{ error, code, details }` envelope.
+- **No backend changes.** All endpoints reused as-is (`GET /api/listings`, `GET /api/stats`, `POST /api/listings`, `GET /api/my-listings`, `DELETE /api/listings/:id`, auth endpoints); `is_locked` contact privacy preserved — contact details render only in the details modal when the backend unlocked them.
+- Verification: strict typecheck 0 errors · 57/57 tests · build green. UI verified via typecheck/build and code review only — no browser tooling is available in this environment, so no screenshots could be captured.
+
 ## 2026-11-11 — Phase 1: Secure Student Accounts (SPEC-002)
 
 - **Real authentication replaces the demo login.** Passwordless email OTP: `POST /api/auth/register` issues a one-time 6-digit code (HMAC-hashed, 10-min expiry, max 5 attempts, one active code per user), `POST /api/auth/verify-email` consumes it, marks the account verified, and issues an opaque server-side session. The old `POST /api/auth/login` is removed.

@@ -31,16 +31,37 @@ export interface Listing {
   is_locked?: boolean;
 }
 
+export interface ListingStats {
+  total: number;
+  solo: number;
+  groups: number;
+}
+
 export const MAJORS = [
-  "Computer Science",
-  "Information Technology",
   "Data Science",
   "Software Engineering",
-  "Cybersecurity",
-  "Computer Engineering",
-  "Information Systems",
-  "Other"
+  "Hardware Engineering",
+  "Communication Engineering"
 ];
+
+/**
+ * Safely parse the `listings.skills` JSON string column.
+ * Returns [] for null/undefined, malformed JSON, or non-array/non-string values
+ * instead of crashing the caller.
+ */
+export function parseSkills(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((skill): skill is string => typeof skill === "string")
+      .map((skill) => skill.trim())
+      .filter((skill) => skill.length > 0);
+  } catch {
+    return [];
+  }
+}
 
 export const SKILLS = [
   "React", "Node.js", "Python", "Java", "C++", "UI/UX", "Figma", 

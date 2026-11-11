@@ -1,8 +1,25 @@
 # Implementation Status
 
 **Last updated:** 2026-11-11
-**Current phase:** 1 — Secure Student Accounts (complete) · Phase 2 next
+**Current phase:** 1 — Secure Student Accounts (complete) · Explore redesign (complete, frontend-only) · Phase 2 next
 **Branch:** `main`
+
+## Explore page redesign (2026-11-11, frontend-only)
+
+| Deliverable | Status | Notes |
+|---|---|---|
+| Light design tokens | ✅ done | `src/index.css` `@theme`: background `#F8F9FE`, surface `#FFFFFF`, primary `#4938DF`, secondary `#7668EF`, ink `#171A3B`, muted `#747895`, border `#E8E9F4`, lavender `#F0EEFF`, soft blue/green/orange tints; dark glass utilities removed |
+| Component extraction | ✅ done | `src/components/`: `Sidebar` (+`MobileNav`), `ExplorePage`, `ExploreCard` (+`majorStyleFor`, `ListingTypeBadge`), `ListingDetailsModal`, `MyListingsPage`, `EmptyState`, `LoadingSkeleton`; `LoginModal`/`PostForm` remain in `App.tsx` |
+| Discovery cards | ✅ done | Horizontal reference layout: tinted major panel + colored edge stripe (per-major accent), `project_idea` initiative (line-clamped), compact Solo/Group badge, skill chips with safe JSON parse (`parseSkills`) and `+N` overflow, "N members needed" for group + `slots_open`, outlined View Details pill opening the details modal |
+| Privacy on cards | ✅ done | No student names, photos, academic years, deadlines, ratings, bookmarks, or fake counters; contact info only in the details modal, only when the backend returns it unlocked (`is_locked: false`) |
+| Hero and search | ✅ done | Compact campus-inspired hero ("capstone team" accented, subtle SVG silhouette), search bar with inline Search button (Enter submits, X clears) over initiative/major/skills — never `listings.name` |
+| Filters & sort | ✅ done | 4 major chips (Data Science, Software Engineering, Hardware Engineering, Communication Engineering); All/Solo/Group type filter; right-aligned Most Recent/Oldest client-side sort on `created_at` |
+| `MAJORS` 8 → 4 | ✅ done | Free-text `listings.major` column, 0 listing rows — no migration; PostForm select and filter chips updated together |
+| My Listings on real endpoint | ✅ done | `GET /api/my-listings` (was client-filtered public feed) + `DELETE /api/listings/:id` with confirm and inline error notice |
+| Loading / empty / error states | ✅ done | Skeleton cards (no spinners); "No capstone initiatives yet"; "No matching initiatives found" + clear filters; error + Retry; PostForm inline error parses `{ error, code, details }` |
+| Backend changes | ✅ none | All endpoints reused as-is; auth flow, CSRF, sessions, schema, and tests untouched |
+
+**Verification (2026-11-11):** `npm run typecheck` 0 errors · `npx vitest run` 57/57 · `npm run build` green · dark-theme sweep grep clean. UI verified by static checks and code review only — no browser/screenshot tooling available in this environment; responsive behavior (1440/1024/768/390 px) not visually observed.
 
 ## Phase 1 progress (SPEC-002 — [`docs/specs/002-authentication.md`](../specs/002-authentication.md))
 
